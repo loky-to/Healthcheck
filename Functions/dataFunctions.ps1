@@ -16,11 +16,12 @@ function Get-AD-Uncorrelated-Data {
             $response = Invoke-WebRequest -Uri $uri -Method 'GET' -Headers $headers
 
             #$accounts = $response.Content | ConvertFrom-Json
-            Add-Type -AssemblyName System.Web.Extensions
-            $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
-            $accounts = $serializer.DeserializeObject($response.Content)
+            # Add-Type -AssemblyName System.Web.Extensions
+            # $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+            # $accounts = $serializer.DeserializeObject($response.Content)
+            $accounts = $response.Content | ConvertFrom-Json -AsHashTable
 
-            $totalCount = [int]$response.Headers["X-Total-Count"]
+            $totalCount = [int]($response.Headers["X-Total-Count"][0] ?? 0)
 
             $allAccounts += $accounts
             $offset += $limit
@@ -107,14 +108,14 @@ function Get-Role-Data {
                 $response = Invoke-WebRequest -Uri $uri -Method 'GET' -Headers $headers
 
                 $roles = $response.Content | ConvertFrom-Json
-                $totalCount = [int]$response.Headers["X-Total-Count"]
+                $totalCount = [int]($response.Headers["X-Total-Count"][0] ?? 0)
 
                 foreach ($role in $roles) {
                     $roleId = $role.id
                     # $identityUri = "https://$script:tenant.api.identitynow-demo.com/beta/roles/$roleId/assigned-identities?count=true"
                     $identityUri = "https://$script:tenant.api.identitynow.com/beta/roles/$roleId/assigned-identities?count=true"
                     $identityResponse = Invoke-WebRequest -Uri $identityUri -Method 'GET' -Headers $headers
-                    $identityCount = [int]$identityResponse.Headers["X-Total-Count"]
+                    $identityCount = [int]($identityResponse.Headers["X-Total-Count"][0] ?? 0)
 
                     if (!$role.enabled) {
                         $summary = "Disabled"
@@ -221,7 +222,7 @@ function Get-Workgroup-Data {
                 $response = Invoke-WebRequest -Uri $uri -Method 'GET' -Headers $headers
 
                 $groups = $response.Content | ConvertFrom-Json
-                $totalCount = [int]$response.Headers["X-Total-Count"]
+                $totalCount = [int]($response.Headers["X-Total-Count"][0] ?? 0)
 
                 foreach ($item in $groups) {
                     if ($item.memberCount -eq 0) {

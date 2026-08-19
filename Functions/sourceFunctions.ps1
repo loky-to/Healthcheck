@@ -288,7 +288,7 @@ function Get-Delimited-Source-Data {
             } elseif ($statusMap[$source.status] -eq "Config Incomplete") {
                 $colourCode = $script:colourCodeYellow
             } else {
-                $colourCode = $script:colourTransparent
+                $colourCode = $script:colourCodeTransparent
             }
 
             $results += [PSCustomObject]@{
@@ -331,12 +331,18 @@ function Get-Other-Source-Data {
 		$results = @()
 
 		foreach ($source in $otherSourceResponse) {
-            if ($statusMap[$source.status] -eq "Healthy") {
-                $colourCode = $script:colourCodeGreen
-            } elseif ($statusMap[$source.status] -eq "Config Incomplete") {
-                $colourCode = $script:colourCodeYellow
-            } else {
-                $colourCode = $script:colourTransparent
+            switch ($statusMap[$source.status]) {
+                "Healthy" {
+                    $colourCode = $script:colourCodeGreen
+                    break
+                }
+                "Config Incomplete" {
+                    $colourCode = $script:colourCodeYellow
+                    break
+                }
+                default {
+                    $colourCode = $script:colourCodeTransparent
+                }
             }
 
             $results += [PSCustomObject]@{

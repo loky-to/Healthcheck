@@ -252,7 +252,8 @@ function Create-Password-Policy-WordTables {
 
         # Format the table
         $headerRow = $table.Rows.Item(1)
-        $headerRow.Shading.BackgroundPatternColor = [Microsoft.Office.Interop.Word.WdColor]::wdColorGray05
+        $headerRow.Shading.BackgroundPatternColor = 15987699
+        # $headerRow.Shading.BackgroundPatternColor = [Microsoft.Office.Interop.Word.WdColor]::wdColorGray05
         $headerRow.Range.Font.Bold = $true
         $table.Borders.Enable = $true
 

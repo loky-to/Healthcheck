@@ -13,8 +13,10 @@ function Get-AverageTime {
     $durations = @()
     foreach ($task in $tasks) {
         if ($task.completionStatus -eq "SUCCESS") {
-            $launched = [datetime]::Parse($task.launched)
-            $completed = [datetime]::Parse($task.completed)
+            $launched = Get-Date $task.launched
+            $completed = Get-Date $task.completed
+            # $launched = [datetime]::Parse($task.launched)
+            # $completed = [datetime]::Parse($task.completed)
             $duration = ($completed - $launched).TotalSeconds
             $durations += $duration
         }
@@ -128,7 +130,7 @@ $jsonBody = @"
                 $searchResponse = Invoke-WebRequest -Uri "https://$script:tenant.api.identitynow.com/v3/search?offset=$offset&limit=$limit&count=true" -Method Post -Headers $headers -Body $jsonBody
                 $data = $searchResponse.Content | ConvertFrom-Json
 
-                $totalCount = [int]$searchResponse.Headers["X-Total-Count"]
+                $totalCount = [int]($searchResponse.Headers["X-Total-Count"][0] ?? 0)
                 if ($totalCount -gt 10000) {$totalCount = 10000}
 
                 $allEvents += $data
@@ -270,7 +272,7 @@ $jsonBody = @"
             $jsonBody = @"
 {
     "query": {
-        "query": "created:[$daysInPast TO now] AND target.name:\`"$sourceName\`" AND (technicalName:$technicalName OR technicalName:$technicalNamePassed)"
+        "query": "created:[$daysInPast TO now] AND attributes.sourceName:\`"$sourceName\`" AND (technicalName:$technicalName OR technicalName:$technicalNamePassed)"
     },
     "indices": ["events"]
 }
@@ -278,7 +280,7 @@ $jsonBody = @"
         
             # $totalAggResponse = Invoke-WebRequest -Uri "https://$script:tenant.api.identitynow-demo.com/v3/search?offset=0&limit=1&count=true" -Method Post -Headers $headers -Body $jsonBody
             $totalAggResponse = Invoke-WebRequest -Uri "https://$script:tenant.api.identitynow.com/v3/search?offset=0&limit=1&count=true" -Method Post -Headers $headers -Body $jsonBody
-            $totalAggregations = [int]$totalAggResponse.Headers["X-Total-Count"]
+            $totalAggregations = [int]($totalAggResponse.Headers["X-Total-Count"][0] ?? 0)
 
             # Calculate percentage
             $percentage = ([double]$count / [double]$totalAggregations) * 100
@@ -374,6 +376,60 @@ $jsonBody = @"
 
 }
 
+function Get-WorkflowExecutionsByStatus {
+    param (
+        [string]$status,
+        [string]$id,
+        [hashtable]$headers
+    )
+
+    $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $headers.Add("Accept", "application/json")
+    $headers.Add("Authorization", "Bearer $script:accessToken")
+    
+    $limit = 250
+    $offset = 0
+    $results = [System.Collections.Generic.List[object]]::new()
+    $totalCount = 0
+    $countCaptured = $false
+
+    do {        
+        $url = 'https://'+$script:tenant+'.api.identitynow.com/v2024/workflows/'+$id+'/executions?limit='+$limit+'&offset='+$offset+'&count=true&filters=status eq' + ' "'+$status+'"'
+
+        $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers -ResponseHeadersVariable responseHeaders
+
+        if (-not $countCaptured -and $responseHeaders.ContainsKey('X-Total-Count')) {
+            $totalCount = [int]$responseHeaders['X-Total-Count'][0]
+            $countCaptured = $true
+        }
+
+        if ($response -and $response.Count -gt 0) {
+            $results.AddRange($response)
+        }
+        else {
+            break
+        }
+
+        if ($results.Count -ge $totalCount -and $totalCount -gt 0) {
+            break
+        }
+
+        $offset += $limit
+    } while ($true)
+
+    if ($totalCount -eq 0) {
+        $totalCount = $results.Count
+    }
+
+    return [PSCustomObject]@{
+        status = $status
+        items  = $results
+        count  = $totalCount
+        itemsCount = $results.Count
+    }
+
+}
+
 function Get-WorkflowData() {
     
     $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
@@ -395,19 +451,68 @@ function Get-WorkflowData() {
             # $workflowDetails = Invoke-RestMethod "https://$tenant.api.identitynow-demo.com/v2024/workflows/$id" -Method 'GET' -Headers $headers
             $workflowDetails = Invoke-RestMethod "https://$tenant.api.identitynow.com/v2024/workflows/$id" -Method 'GET' -Headers $headers
 
+            $workflowCanceled = Get-WorkflowExecutionsByStatus -status "Canceled" -id $id -Headers $headers
+            $workflowFailed = Get-WorkflowExecutionsByStatus -status "Failed" -id $id -Headers $headers
+
+            $failedCount = $workflowFailed.count
+            $canceledCount = $workflowCanceled.count
+
             if ($workflowDetails.executionCount -gt 0) {
-                $errorRate = ($workflowDetails.failureCount / $workflowDetails.executionCount) * 100
-                $formattedErrorRate = "{0:N1}" -f $errorRate
+                $errorRate = ($failedCount / $workflowDetails.executionCount) * 100
+                $formattedFailedErrorRate = "{0:N1}" -f $errorRate
+
+                switch ($errorRate) {
+                    {$_ -ge 30} {
+                        $colourCode = $script:colourCodeRed
+                        break
+                    }
+                    {$_ -gt 0 -and $_ -lt 30} {
+                        $colourCode = $script:colourCodeYellow
+                        break
+                    }
+                    default {
+                        $colourCode = $script:colourCodeGreen
+                        break
+                    }
+                }
+
             } else {
-                $formattedErrorRate = "0"
+                $formattedFailedErrorRate = "0"
+                $colourCode = $script:colourCodeGreen
+            }
+
+            if ($workflowDetails.executionCount -gt 0) {
+                $errorRate = ($canceledCount / $workflowDetails.executionCount) * 100
+                $formattedCanceledErrorRate = "{0:N1}" -f $errorRate
+
+                switch ($errorRate) {
+                    {$_ -ge 30} {
+                        $colourCode = $script:colourCodeRed
+                        break
+                    }
+                    {$_ -gt 0 -and $_ -lt 30} {
+                        $colourCode = $script:colourCodeYellow
+                        break
+                    }
+                    default {
+                        $colourCode = $script:colourCodeGreen
+                        break
+                    }
+                }
+
+            } else {
+                $formattedCanceledErrorRate = "0"
+                $colourCode = $script:colourCodeGreen
             }
 
             $results += [PSCustomObject]@{
-                "Name"            = $workflow.name
-                "Owner"           = $workflow.owner.name
-                "Enabled"         = $workflow.enabled
-                "Execution Count" = $workflowDetails.executionCount
-                "Error Rate"      = $formattedErrorRate + "%"
+                "Name"              = $workflow.name
+                "Trigger"           = $workflow.trigger.attributes.id
+                "Enabled"           = $workflow.enabled
+                "Execution Count"   = $workflowDetails.executionCount
+                "Failed Error Rate" = $formattedFailedErrorRate + "%"
+                "Cancellation Error Rate" = $formattedCanceledErrorRate + "%"
+                "Colour"            = $colourCode
             }
         }
 
@@ -419,12 +524,10 @@ function Get-WorkflowData() {
     }
 
 
-    $headers = @("Name", "Owner", "Enabled", "Error Rate")
+    $headers = @("Name", "Trigger", "Enabled", "Failed Error Rate", "Cancellation Error Rate")
 
 
 }
-
-
 
 function Get-AggregationData() { 
     

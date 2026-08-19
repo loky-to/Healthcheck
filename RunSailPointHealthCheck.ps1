@@ -19,8 +19,8 @@
 $consultant = "Loky To"
 $clientName = "APAM"
 $script:tenant = "apac"
-$clientId = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's documents\Healthcheck\APAM_client_id.txt"
-$clientSecret = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's documents\Healthcheck\APAM_client_secret.txt"
+$clientId = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's repo\Healthcheck\APAM_client_id.txt"
+$clientSecret = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's repo\Healthcheck\APAM_client_secret.txt"
 
 # Define word doc paths
 $underscoreClientName = $clientName -replace '\s+', '_'
@@ -31,7 +31,7 @@ $outputPath = "$PSScriptRoot\SailPoint_HealthCheck_${underscoreClientName}_$(Get
 $script:colourCodeRed = (0x9F -shl 16) -bor (0x9F -shl 8) -bor 0xFF
 $script:colourCodeYellow = (204 -shl 16) -bor (242 -shl 8) -bor 255
 $script:colourCodeGreen = (217 -shl 16) -bor (239 -shl 8) -bor 226
-$script:colourTransparent = $null
+$script:colourCodeTransparent = $null
 
 #Generate an access token that will be used for all API calls
 Write-Host "Getting Token"
@@ -153,9 +153,9 @@ $singleValues = @{
     "{{Date}}" = (Get-Date -Format "dd/MM/yyyy")
     "{{Consultant}}" = $consultant
     "{{TenantName}}" = $script:tenant
-    "{{IdentityCount}}" = if ($identityCount -and $identityCount.Headers) { $identityCount.Headers["X-Total-Count"].ToString() } else { "!!!ERROR!!!" }
-    "{{SourceCount}}" = if ($sourceCount -and $sourceCount.Headers) { $sourceCount.Headers["X-Total-Count"].ToString() } else { "!!!ERROR!!!" }
-    "{{AppCount}}" = if ($appCount -and $appCount.Headers) { $appCount.Headers["X-Total-Count"].ToString() } else { "!!!ERROR!!!" }
+    "{{IdentityCount}}" = if ($identityCount -and $identityCount.Headers) { $identityCount.Headers["X-Total-Count"][0].ToString() } else { "!!!ERROR!!!" }
+    "{{SourceCount}}" = if ($sourceCount -and $sourceCount.Headers) { $sourceCount.Headers["X-Total-Count"][0].ToString() } else { "!!!ERROR!!!" }
+    "{{AppCount}}" = if ($appCount -and $appCount.Headers) { $appCount.Headers["X-Total-Count"][0].ToString() } else { "!!!ERROR!!!" }
     "{{SSOEnabled}}" = if ($authOrgSSOConfig) { $authOrgSSOConfig.enabled } else { "!!!ERROR!!!" }
     "{{BypassSSO}}" = if ($authOrgSSOConfig) { $authOrgSSOConfig.bypassIDP } else { "!!!ERROR!!!" }
     "{{TrustedCountries}}" = if ($authOrgNetworkConfig) { $authOrgNetworkConfig.countryString } else { "!!!ERROR!!!" }
@@ -171,6 +171,7 @@ $singleValues = @{
     "{{PATAdminTotal}}" = if ($patData) { $patData.PATAdminTotal } else { "!!!ERROR!!!" }
     "{{PATNever}}" = if ($patData) { $patData.PATNever } else { "!!!ERROR!!!" }
     "{{PAT90}}" = if ($patData) { $patData.PAT90 } else { "!!!ERROR!!!" }
+    "{{PATNoExpiry}}" = if ($patData) { $patData.PATNoExpiry } else { "!!!ERROR!!!" }
     "{{AccModFail}}" = if ($opAccountProvSummary) { $opAccountProvSummary.AccModFail } else { "!!!ERROR!!!" }
     "{{AccCrtFail}}" = if ($opAccountProvSummary) { $opAccountProvSummary.AccCrtFail } else { "!!!ERROR!!!" }
     "{{AccDisFail}}" = if ($opAccountProvSummary) { $opAccountProvSummary.AccDisFail } else { "!!!ERROR!!!" }
@@ -296,7 +297,7 @@ Populate-WordTable -doc $doc -placeholder "OpAccessProvTable" -inputData $opAcce
 
 # Update Workflows Table
 Write-Host "Updating Workflow Table"
-$headers = @("Name", "Owner", "Enabled", "Execution Count", "Error Rate")
+$headers = @("Name", "Trigger", "Enabled", "Execution Count", "Failed Error Rate", "Cancellation Error Rate")
 Populate-WordTable -doc $doc -placeholder "WorkflowTable" -inputData $workflowData -headers $headers
 
 # Update Operations Aggregation Table

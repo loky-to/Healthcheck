@@ -175,12 +175,15 @@ function Get-Admin-Access {
 			$eventResponse = Invoke-RestMethod -Uri "https://$script:tenant.api.identitynow.com/v3/search" -Method Post -Headers $headers -Body $eventBody
 
 			# Process last login
-			if ($eventResponse.Count -gt 0) {
+			if ($eventResponse -and $eventResponse.Count -gt 0) {
                 $lastEvent = $eventResponse[0]
-				$createdUtc = [datetime]::Parse($lastEvent.created).ToUniversalTime()
+				$createdUtc = [datetime]::ParseExact(
+                    $lastEvent.created, 
+                    "MM/dd/yyyy HH:mm:ss", 
+                    [System.Globalization.CultureInfo]::InvariantCulture
+                ).ToUniversalTime()
 				$melbourneTime = $createdUtc.AddHours(10)  # Adjust for Melbourne time (UTC+10)
 				$formattedDate = $melbourneTime.ToString("dd/MM/yyyy HH:mm")
-				$loginType = "N/A"
                 
                 # Calculate days since last login
                 $daysSinceLogin = (Get-Date) - $melbourneTime
@@ -192,11 +195,11 @@ function Get-Admin-Access {
                     $colourCode = $script:colourCodeGreen
                 }
 
-				switch ($lastEvent.attributes.info) {
-					"LOGIN_SUCCESS_SAML" { $loginType = "SSO" }
-					"LOGIN_SUCCESS"      { $loginType = "Password" }
-					default              { $loginType = "N/A" }
-				}
+				$loginType = switch ($lastEvent.attributes.info) {
+                    "LOGIN_SUCCESS_SAML" { "SSO" }
+                    "LOGIN_SUCCESS"      { "Password" }
+                    default              { "N/A" }
+                }
 			} else {
 				$formattedDate = "Never Logged In"
                 $colourCode = $script:colourCodeRed
@@ -232,9 +235,17 @@ function Get-PAT-Data {
 		# $patResponse = Invoke-RestMethod "https://$script:tenant.api.identitynow-demo.com/v3/personal-access-tokens" -Method 'GET' -Headers $headers
 		$patResponse = Invoke-RestMethod "https://$script:tenant.api.identitynow.com/v3/personal-access-tokens" -Method 'GET' -Headers $headers
 		
+        if ($null -eq $patResponse) {
+            $patResponse = @()
+        }
+        elseif (-not ($patResponse -is [array])) {
+            $patResponse = @($patResponse)
+        }
+
 		$scopeAllCount = 0
         $inactiveCount = 0
         $neverCount = 0
+        $noExpiryCount = 0
 
         foreach ($token in $patResponse) {
             if ($token.scope -contains "sp:scopes:all") {
@@ -246,9 +257,21 @@ function Get-PAT-Data {
                 continue
             }
 
-            $trimmedDate = $($token.lastUsed).Substring(0, $($token.lastUsed).LastIndexOf('.'))
+            if ($null -eq $token.expirationDate) {
+                $noExpiryCount++
+                continue
+            }
 
-            $lastUsedDateTime = [datetime]::ParseExact($trimmedDate, "yyyy-MM-ddTHH:mm:ss", $null)
+            # $trimmedDate = $token.lastUsed.Substring(0, $token.lastUsed.LastIndexOf('.'))
+
+            # $lastUsedDateTime = [datetime]::ParseExact($trimmedDate, "yyyy-MM-ddTHH:mm:ss", $null)
+            $lastUsedDateTime = $token.lastUsed -as [DateTime]
+
+            if (-not $lastUsedDateTime) {
+                Write-Warning "Could not parse lastUsed date for token $($token.id)"
+                continue
+            }
+            
             $currentDateTime = Get-Date
             $daysDifference = ($currentDateTime - $lastUsedDateTime).Days
             if ($daysDifference -gt 90) {
@@ -262,6 +285,7 @@ function Get-PAT-Data {
             "PATAdminTotal" = $scopeAllCount
             "PATNever"      = $neverCount
             "PAT90"         = $inactiveCount
+            "PATNoExpiry"   = $noExpiryCount
         }
 
 		return $results

@@ -14,15 +14,19 @@
 
 #TEMP Graham work around
 $script:tenant = "apac"
-$clientId = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's documents\Healthcheck\APAM_client_id.txt"
-$clientSecret = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's documents\Healthcheck\APAM_client_secret.txt"
+$clientId = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's repo\Healthcheck\APAM_client_id.txt"
+$clientSecret = Get-Content "C:\Users\LokyTo\OneDrive - Rowe Consulting Services Pty Ltd\Documents\Loky's repo\Healthcheck\APAM_client_secret.txt"
 
 #Generate an access token that will be used for all API calls
 # $jsonToken = Invoke-RestMethod -Method Post -Uri "https://$script:tenant.api.identitynow-demo.com/oauth/token?grant_type=client_credentials&client_id=$clientId&client_secret=$clientSecret"
 $jsonToken = Invoke-RestMethod -Method Post -Uri "https://$script:tenant.api.identitynow.com/oauth/token?grant_type=client_credentials&client_id=$clientId&client_secret=$clientSecret"
 $script:accessToken = $jsonToken.access_token
 
-$output = Get-VA-Data
+$headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $headers.Add("Accept", "application/json")
+    $headers.Add("Authorization", "Bearer $script:accessToken")
+    
+$output = Get-WorkflowData
 
 Write-Host "----"
 Write-Host $output
